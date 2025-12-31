@@ -8,44 +8,111 @@
 // 重要说明：
 // - 如果使用真机（Expo Go），必须使用电脑的实际 IP 地址
 // - 如果使用模拟器，可以使用 localhost 或特殊地址
-// 
-// 当前配置：使用电脑 IP 地址（适用于真机和模拟器）
+// - IP地址可以通过设置页面进行配置，存储在本地
 // 如果连接失败，请检查：
 // 1. 后端是否运行：uvicorn main:app --reload --host 0.0.0.0
 // 2. 手机和电脑是否在同一 WiFi
 // 3. 防火墙是否允许 8000 端口
+// 4. 在设置页面配置正确的服务器IP地址
 
 import { Platform } from 'react-native';
+import { getApiServerIp, getApiServerPort } from './config';
 
-// 电脑的 IP 地址（根据你的网络环境修改）
-const COMPUTER_IP = '192.168.4.23';
+// 默认IP地址（如果用户未配置时使用）
+const DEFAULT_IP = '192.168.4.23';
 
-const getApiBaseUrl = () => {
+/**
+ * 从本地配置文件读取IP地址（启动时自动检测的IP）
+ */
+const getLocalConfigIp = () => {
+  try {
+    // 尝试读取启动脚本生成的配置文件
+    const localConfig = require('../api-config.json');
+    return localConfig.apiServerIp || null;
+  } catch (error) {
+    // 配置文件不存在，返回 null
+    return null;
+  }
+};
+
+/**
+ * 从本地配置文件读取端口
+ */
+const getLocalConfigPort = () => {
+  try {
+    const localConfig = require('../api-config.json');
+    return localConfig.apiServerPort || 8000;
+  } catch (error) {
+    return 8000;
+  }
+};
+
+/**
+ * 获取API基础URL（异步函数）
+ */
+const getApiBaseUrl = async () => {
   if (!__DEV__) {
     return 'https://your-api-domain.com';
   }
+  
+  // 优先使用本地配置文件中的IP（启动时自动检测的）
+  let serverIp = getLocalConfigIp();
+  let serverPort = getLocalConfigPort();
+  
+  // 如果本地配置文件没有IP，则从用户配置中获取（设置页面配置的）
+  if (!serverIp) {
+    serverIp = await getApiServerIp();
+    serverPort = await getApiServerPort();
+  }
+  
+  // 如果都没有配置，使用默认IP
+  const ip = serverIp || DEFAULT_IP;
+  const port = serverPort || 8000;
   
   // 开发环境
   if (Platform.OS === 'android') {
     // Android：优先使用实际 IP（适用于真机和模拟器）
     // 如果模拟器无法连接，可以尝试改为 'http://10.0.2.2:8000'
-    return `http://${COMPUTER_IP}:8000`;
+    return `http://${ip}:${port}`;
   } else if (Platform.OS === 'ios') {
     // iOS：使用实际 IP（真机必须）
     // 如果是 iOS 模拟器且无法连接，可以尝试改为 'http://localhost:8000'
-    return `http://${COMPUTER_IP}:8000`;
+    return `http://${ip}:${port}`;
   } else {
     // Web 平台：使用 localhost
-    return 'http://localhost:8000';
+    return `http://localhost:${port}`;
   }
 };
 
-const API_BASE_URL = getApiBaseUrl();
-
 class ApiClient {
   constructor() {
-    this.baseURL = API_BASE_URL;
+    this.baseURL = null; // 延迟初始化
     this.token = null;
+    this._baseURLPromise = null; // 缓存Promise以避免重复获取
+  }
+
+  /**
+   * 获取基础URL（异步）
+   */
+  async getBaseURL() {
+    if (this.baseURL) {
+      return this.baseURL;
+    }
+    
+    if (!this._baseURLPromise) {
+      this._baseURLPromise = getApiBaseUrl();
+    }
+    
+    this.baseURL = await this._baseURLPromise;
+    return this.baseURL;
+  }
+
+  /**
+   * 清除缓存的baseURL（当配置改变时调用）
+   */
+  clearBaseURLCache() {
+    this.baseURL = null;
+    this._baseURLPromise = null;
   }
 
   /**
@@ -79,7 +146,8 @@ class ApiClient {
    * 通用请求方法
    */
   async request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
+    const baseURL = await this.getBaseURL();
+    const url = `${baseURL}${endpoint}`;
     const config = {
       ...options,
       headers: {
@@ -122,12 +190,14 @@ class ApiClient {
     } catch (error) {
       console.error('❌ API Request Error:', error);
       console.error('📍 Request URL:', url);
-      console.error('📍 API Base URL:', this.baseURL);
+      const currentBaseURL = await this.getBaseURL();
+      console.error('📍 API Base URL:', currentBaseURL);
       
       // 提供更友好的错误信息
       let errorMessage = error.message;
       if (error.message === 'Network request failed' || error.message.includes('NetworkError')) {
-        errorMessage = `无法连接到服务器 (${this.baseURL})\n\n请检查：\n1. 后端服务器是否正在运行\n2. 手机和电脑是否在同一 WiFi 网络\n3. 防火墙是否允许 8000 端口\n4. 如果使用真机，确保使用电脑的 IP 地址而不是 localhost`;
+        const currentBaseURL = await this.getBaseURL();
+        errorMessage = `无法连接到服务器 (${currentBaseURL})\n\n请检查：\n1. 后端服务器是否正在运行\n2. 手机和电脑是否在同一 WiFi 网络\n3. 防火墙是否允许端口访问\n4. 在设置页面配置正确的服务器IP地址\n5. 如果使用真机，确保使用电脑的 IP 地址而不是 localhost`;
       }
       
       throw new Error(errorMessage);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { UserStorage } from '../../utils/storage';
+import { getApiConfig, setApiServerIp, setApiServerPort, clearApiConfig } from '../../utils/config';
+import apiClient from '../../utils/api';
 import i18n from '../../utils/i18n';
 
 export default function SettingsView({ user, onUserUpdate, onLogout, onRefresh, refreshKey }) {
@@ -17,6 +19,104 @@ export default function SettingsView({ user, onUserUpdate, onLogout, onRefresh, 
   const [username, setUsername] = useState(user?.username || '');
   const [email, setEmail] = useState(user?.email || '');
   const [language, setLanguage] = useState(i18n.locale);
+  const [showServerConfigModal, setShowServerConfigModal] = useState(false);
+  const [serverIp, setServerIp] = useState('');
+  const [serverPort, setServerPort] = useState('8000');
+  const [currentServerConfig, setCurrentServerConfig] = useState(null);
+
+  useEffect(() => {
+    loadServerConfig();
+  }, []);
+
+  const loadServerConfig = async () => {
+    try {
+      const config = await getApiConfig();
+      setCurrentServerConfig(config);
+      setServerIp(config.apiServerIp || '');
+      setServerPort(config.apiServerPort?.toString() || '8000');
+    } catch (error) {
+      console.error('加载服务器配置失败:', error);
+    }
+  };
+
+  const handleSaveServerConfig = async () => {
+    try {
+      // 验证IP地址格式（简单验证）
+      if (serverIp && !/^(\d{1,3}\.){3}\d{1,3}$/.test(serverIp.trim())) {
+        Alert.alert(
+          i18n.locale === 'zh' ? '错误' : 'Error',
+          i18n.locale === 'zh' ? 'IP地址格式不正确' : 'Invalid IP address format'
+        );
+        return;
+      }
+
+      // 验证端口号
+      const port = parseInt(serverPort, 10);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        Alert.alert(
+          i18n.locale === 'zh' ? '错误' : 'Error',
+          i18n.locale === 'zh' ? '端口号必须在1-65535之间' : 'Port must be between 1 and 65535'
+        );
+        return;
+      }
+
+      // 保存配置
+      if (serverIp.trim()) {
+        await setApiServerIp(serverIp.trim());
+      } else {
+        // 如果IP为空，清除配置使用默认值
+        await clearApiConfig();
+      }
+      await setApiServerPort(port);
+
+      // 清除API客户端的缓存，使其使用新配置
+      apiClient.clearBaseURLCache();
+
+      Alert.alert(
+        i18n.locale === 'zh' ? '成功' : 'Success',
+        i18n.locale === 'zh' ? '服务器配置已保存' : 'Server configuration saved',
+        [
+          {
+            text: i18n.locale === 'zh' ? '确定' : 'OK',
+            onPress: () => {
+              setShowServerConfigModal(false);
+              loadServerConfig();
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert(
+        i18n.locale === 'zh' ? '错误' : 'Error',
+        i18n.locale === 'zh' ? '保存配置时发生错误' : 'An error occurred while saving configuration'
+      );
+    }
+  };
+
+  const handleResetServerConfig = async () => {
+    Alert.alert(
+      i18n.locale === 'zh' ? '确认重置' : 'Confirm Reset',
+      i18n.locale === 'zh' ? '确定要重置服务器配置为默认值吗？' : 'Are you sure you want to reset server configuration to default?',
+      [
+        {
+          text: i18n.locale === 'zh' ? '取消' : 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: i18n.locale === 'zh' ? '重置' : 'Reset',
+          onPress: async () => {
+            await clearApiConfig();
+            apiClient.clearBaseURLCache();
+            loadServerConfig();
+            Alert.alert(
+              i18n.locale === 'zh' ? '成功' : 'Success',
+              i18n.locale === 'zh' ? '配置已重置' : 'Configuration reset'
+            );
+          },
+        },
+      ]
+    );
+  };
 
   const handleSave = async () => {
     try {
@@ -105,6 +205,52 @@ export default function SettingsView({ user, onUserUpdate, onLogout, onRefresh, 
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {i18n.locale === 'zh' ? '服务器配置' : 'Server Configuration'}
+          </Text>
+          
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>
+                {i18n.locale === 'zh' ? '服务器IP' : 'Server IP'}
+              </Text>
+              <Text style={styles.infoValue}>
+                {currentServerConfig?.apiServerIp || (i18n.locale === 'zh' ? '默认' : 'Default')}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>
+                {i18n.locale === 'zh' ? '端口' : 'Port'}
+              </Text>
+              <Text style={styles.infoValue}>
+                {currentServerConfig?.apiServerPort || 8000}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => {
+                loadServerConfig();
+                setShowServerConfigModal(true);
+              }}
+            >
+              <Text style={styles.editButtonText}>
+                {i18n.locale === 'zh' ? '配置服务器' : 'Configure Server'}
+              </Text>
+            </TouchableOpacity>
+            {currentServerConfig?.apiServerIp && (
+              <TouchableOpacity
+                style={[styles.editButton, styles.resetButton]}
+                onPress={handleResetServerConfig}
+              >
+                <Text style={[styles.editButtonText, styles.resetButtonText]}>
+                  {i18n.locale === 'zh' ? '重置为默认' : 'Reset to Default'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
             <Text style={styles.logoutButtonText}>{i18n.t('logout')}</Text>
           </TouchableOpacity>
@@ -151,6 +297,64 @@ export default function SettingsView({ user, onUserUpdate, onLogout, onRefresh, 
               <TouchableOpacity
                 style={[styles.modalButton, styles.submitButton]}
                 onPress={handleSave}
+              >
+                <Text style={styles.submitButtonText}>{i18n.t('save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showServerConfigModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowServerConfigModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {i18n.locale === 'zh' ? '配置服务器' : 'Configure Server'}
+            </Text>
+            
+            <Text style={styles.modalLabel}>
+              {i18n.locale === 'zh' ? '服务器IP地址' : 'Server IP Address'}
+            </Text>
+            <Text style={styles.modalHint}>
+              {i18n.locale === 'zh' 
+                ? '留空使用默认IP (192.168.4.23)' 
+                : 'Leave empty to use default IP (192.168.4.23)'}
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder={i18n.locale === 'zh' ? '例如: 192.168.1.100' : 'e.g. 192.168.1.100'}
+              value={serverIp}
+              onChangeText={setServerIp}
+              keyboardType="numeric"
+              autoCapitalize="none"
+            />
+
+            <Text style={styles.modalLabel}>
+              {i18n.locale === 'zh' ? '端口号' : 'Port'}
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="8000"
+              value={serverPort}
+              onChangeText={setServerPort}
+              keyboardType="numeric"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowServerConfigModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>{i18n.t('cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.submitButton]}
+                onPress={handleSaveServerConfig}
               >
                 <Text style={styles.submitButtonText}>{i18n.t('save')}</Text>
               </TouchableOpacity>
@@ -324,6 +528,19 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  modalHint: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 8,
+    marginTop: -5,
+  },
+  resetButton: {
+    backgroundColor: '#ff6b6b',
+    marginTop: 10,
+  },
+  resetButtonText: {
+    color: '#fff',
   },
 });
 

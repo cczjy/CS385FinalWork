@@ -19,27 +19,52 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
   const [tasks, setTasks] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [groupDetails, setGroupDetails] = useState(group);
 
   useEffect(() => {
     if (group) {
-      loadTasks();
+      setGroupDetails(group);
+      loadGroupDetails();
     }
   }, [group, refreshKey]);
 
-  const loadTasks = async () => {
-    if (group && user && user.id) {
+  useEffect(() => {
+    if (groupDetails && groupDetails.id) {
+      loadTasks();
+    }
+  }, [groupDetails]);
+
+  const loadGroupDetails = async () => {
+    if (group && group.id && user && user.id) {
       try {
-        const groupTasks = await apiClient.getGroupTasks(group.id, user.id);
-        setTasks(groupTasks);
+        // 重新加载群组详情以获取最新的成员列表
+        const details = await apiClient.getGroup(group.id, user.id);
+        if (details) {
+          setGroupDetails(details);
+        }
+      } catch (error) {
+        console.error('Load group details error:', error);
+        // 如果API失败，至少使用传入的group数据
+        setGroupDetails(group);
+      }
+    }
+  };
+
+  const loadTasks = async () => {
+    if (groupDetails && groupDetails.id && user && user.id) {
+      try {
+        const groupTasks = await apiClient.getGroupTasks(groupDetails.id, user.id);
+        setTasks(groupTasks || []);
       } catch (error) {
         console.error('Load tasks error:', error);
+        setTasks([]);
       }
     }
   };
 
   const getUserRole = () => {
-    if (!group || !user) return null;
-    const member = group.members?.find(m => m.userId === user.id);
+    if (!groupDetails || !user) return null;
+    const member = groupDetails.members?.find(m => (m.user_id || m.userId) === user.id);
     return member?.role || null;
   };
 
@@ -77,7 +102,7 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
 
     try {
       await apiClient.createInvitation({
-        group_id: group.id,
+        group_id: groupDetails.id,
         invitee_email: inviteEmail,
       }, user.id);
 
@@ -87,6 +112,7 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
       );
       setShowInviteModal(false);
       setInviteEmail('');
+      loadGroupDetails();
       onRefresh();
     } catch (error) {
       Alert.alert(
@@ -96,7 +122,7 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
     }
   };
 
-  if (!group) {
+  if (!groupDetails) {
     return (
       <View style={styles.container}>
         <Text>{i18n.locale === 'zh' ? '群组不存在' : 'Group not found'}</Text>
@@ -113,7 +139,7 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Text style={styles.backButtonText}>← {i18n.locale === 'zh' ? '返回' : 'Back'}</Text>
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
+        <Text style={styles.title} numberOfLines={1}>{groupDetails.name}</Text>
         {canManage() && (
           <TouchableOpacity
             style={styles.inviteButton}
@@ -146,7 +172,7 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
       <ScrollView style={styles.content}>
         {activeTab === 'tasks' ? (
           <TaskList
-            group={group}
+            group={groupDetails}
             tasks={tasks}
             user={user}
             canManage={canManage()}
@@ -154,11 +180,14 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
           />
         ) : (
           <MemberList
-            group={group}
+            group={groupDetails}
             user={user}
             isOwner={isOwner}
             canManage={canManage()}
-            onRefresh={onRefresh}
+            onRefresh={() => {
+              loadGroupDetails();
+              onRefresh();
+            }}
           />
         )}
       </ScrollView>

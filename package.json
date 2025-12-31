@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
+    "prestart": "node scripts/get-local-ip.js",
+    "preandroid": "node scripts/get-local-ip.js",
+    "preios": "node scripts/get-local-ip.js",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "get-ip": "node scripts/get-local-ip.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

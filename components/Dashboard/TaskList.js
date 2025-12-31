@@ -111,7 +111,7 @@ export default function TaskList({ group, tasks, user, canManage, onRefresh }) {
             </Text>
           </View>
         ) : (
-          tasks.map(renderTask)
+          tasks.map((task) => renderTask(task))
         )}
       </ScrollView>
 

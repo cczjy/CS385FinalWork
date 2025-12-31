@@ -158,11 +158,29 @@ export default function DashboardScreen({ navigation }) {
     );
   }
 
+  const navItems = [
+    { key: 'home', label: i18n.locale === 'zh' ? '主页' : 'Home', icon: '🏠' },
+    { key: 'messages', label: i18n.t('messages'), icon: '💬' },
+    { key: 'settings', label: i18n.t('settings'), icon: '⚙️' },
+  ];
+
+  const handleNavPress = (key) => {
+    if (key === 'home') {
+      // 如果当前在群组详情页，返回主页
+      if (currentView === 'groupDetail') {
+        setCurrentView('home');
+        setSelectedGroup(null);
+      } else {
+        setCurrentView('home');
+      }
+    } else {
+      setCurrentView(key);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <TopNavigation
-        currentView={currentView}
-        onViewChange={setCurrentView}
         onMenuPress={() => setSidebarVisible(!sidebarVisible)}
       />
       <View style={styles.contentContainer}>
@@ -187,6 +205,34 @@ export default function DashboardScreen({ navigation }) {
             onPress={() => setSidebarVisible(false)}
           />
         )}
+      </View>
+      <View style={styles.bottomNav}>
+        {navItems.map((item) => {
+          const isActive = currentView === item.key || (item.key === 'home' && currentView === 'groupDetail');
+          return (
+            <TouchableOpacity
+              key={item.key}
+              style={[
+                styles.bottomNavItem,
+                isActive && styles.activeBottomNavItem,
+              ]}
+              onPress={() => handleNavPress(item.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.bottomNavIcon, isActive && styles.activeBottomNavIcon]}>
+                {item.icon}
+              </Text>
+              <Text
+                style={[
+                  styles.bottomNavText,
+                  isActive && styles.activeBottomNavText,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
@@ -217,6 +263,48 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     zIndex: 998,
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  bottomNavItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginHorizontal: 4,
+  },
+  activeBottomNavItem: {
+    backgroundColor: '#f0f4ff',
+  },
+  bottomNavIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+    opacity: 0.7,
+  },
+  activeBottomNavIcon: {
+    opacity: 1,
+  },
+  bottomNavText: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '500',
+  },
+  activeBottomNavText: {
+    color: '#667eea',
+    fontWeight: 'bold',
   },
 });
 

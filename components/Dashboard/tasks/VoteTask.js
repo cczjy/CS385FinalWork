@@ -99,7 +99,7 @@ export default function VoteTask({ task, user, onUpdate }) {
 
           return (
             <TouchableOpacity
-              key={index}
+              key={`option-${index}-${option}`}
               style={[styles.optionItem, isSelected && styles.selectedOption]}
               onPress={() => !userVote && handleVote(index)}
               disabled={!!userVote}

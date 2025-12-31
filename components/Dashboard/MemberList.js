@@ -7,7 +7,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { GroupStorage, UserStorage } from '../../utils/storage';
+import apiClient from '../../utils/api';
 import i18n from '../../utils/i18n';
 
 export default function MemberList({ group, user, isOwner, canManage, onRefresh }) {
@@ -20,21 +20,24 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
   }, [group]);
 
   const loadMembers = async () => {
-    if (!group || !group.members) return;
+    if (!group || !group.id) return;
     
-    const users = await UserStorage.getAllUsers();
-    const memberDetails = group.members.map(member => {
-      const userDetail = users.find(u => u.id === member.userId);
-      return {
-        ...member,
-        ...userDetail,
-      };
-    });
-    setMembers(memberDetails);
+    try {
+      // 使用API获取成员列表
+      const memberList = await apiClient.getGroupMembers(group.id, user?.id);
+      setMembers(memberList || []);
+    } catch (error) {
+      console.error('Load members error:', error);
+      // 如果API失败，尝试使用group.members作为后备
+      if (group.members) {
+        setMembers(group.members);
+      }
+    }
   };
 
   const handleRemoveMember = (memberId) => {
-    if (memberId === user.id) {
+    const userId = memberId || (selectedMember?.user_id || selectedMember?.userId);
+    if (userId === user.id) {
       Alert.alert(
         i18n.locale === 'zh' ? '提示' : 'Notice',
         i18n.locale === 'zh' ? '不能移除自己' : 'Cannot remove yourself'
@@ -54,8 +57,22 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
           text: i18n.t('remove'),
           style: 'destructive',
           onPress: async () => {
-            await GroupStorage.removeMember(group.id, memberId);
-            onRefresh();
+            try {
+              // TODO: 需要后端API支持删除成员
+              // await apiClient.removeGroupMember(group.id, userId, user.id);
+              Alert.alert(
+                i18n.locale === 'zh' ? '提示' : 'Notice',
+                i18n.locale === 'zh' ? '删除成员功能需要后端API支持' : 'Remove member feature requires backend API support'
+              );
+              // 暂时刷新成员列表
+              loadMembers();
+              onRefresh();
+            } catch (error) {
+              Alert.alert(
+                i18n.locale === 'zh' ? '错误' : 'Error',
+                error.message || (i18n.locale === 'zh' ? '删除成员时发生错误' : 'An error occurred while removing member')
+              );
+            }
           },
         },
       ]
@@ -63,15 +80,22 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
   };
 
   const handleChangeRole = async (memberId, newRole) => {
+    const userId = memberId || (selectedMember?.user_id || selectedMember?.userId);
     try {
-      await GroupStorage.updateMemberRole(group.id, memberId, newRole);
+      // TODO: 需要后端API支持更新成员角色
+      // await apiClient.updateMemberRole(group.id, userId, newRole, user.id);
+      Alert.alert(
+        i18n.locale === 'zh' ? '提示' : 'Notice',
+        i18n.locale === 'zh' ? '更新角色功能需要后端API支持' : 'Update role feature requires backend API support'
+      );
       setShowRoleModal(false);
       setSelectedMember(null);
+      loadMembers();
       onRefresh();
     } catch (error) {
       Alert.alert(
         i18n.locale === 'zh' ? '错误' : 'Error',
-        i18n.locale === 'zh' ? '更新角色时发生错误' : 'An error occurred while updating role'
+        error.message || (i18n.locale === 'zh' ? '更新角色时发生错误' : 'An error occurred while updating role')
       );
     }
   };
@@ -104,7 +128,7 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
 
       <View style={styles.membersList}>
         {members.map((member) => (
-          <View key={member.userId} style={styles.memberCard}>
+          <View key={member.user_id || member.userId || member.id} style={styles.memberCard}>
             <View style={styles.memberInfo}>
               <Text style={styles.memberName}>{member.username || member.email}</Text>
               <Text style={styles.memberEmail}>{member.email}</Text>
@@ -112,10 +136,10 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
                 <Text style={styles.roleText}>{getRoleLabel(member.role)}</Text>
               </View>
             </View>
-            {canManage && member.userId !== user.id && (
+            {canManage && (member.user_id || member.userId) !== user.id && (
               <View style={styles.memberActions}>
-                {isOwner && member.role !== 'owner' && (
-                  <>
+                {isOwner && member.role !== 'owner' ? (
+                  <View style={styles.actionButtonsContainer}>
                     <TouchableOpacity
                       style={styles.actionButton}
                       onPress={() => openRoleModal(member)}
@@ -124,24 +148,23 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.removeButton]}
-                      onPress={() => handleRemoveMember(member.userId)}
+                      onPress={() => handleRemoveMember(member.user_id || member.userId)}
                     >
                       <Text style={[styles.actionButtonText, styles.removeButtonText]}>
                         {i18n.t('remove')}
                       </Text>
                     </TouchableOpacity>
-                  </>
-                )}
-                {!isOwner && member.role === 'member' && (
+                  </View>
+                ) : !isOwner && member.role === 'member' ? (
                   <TouchableOpacity
                     style={[styles.actionButton, styles.removeButton]}
-                    onPress={() => handleRemoveMember(member.userId)}
+                    onPress={() => handleRemoveMember(member.user_id || member.userId)}
                   >
                     <Text style={[styles.actionButtonText, styles.removeButtonText]}>
                       {i18n.t('remove')}
                     </Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
               </View>
             )}
           </View>
@@ -165,7 +188,7 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
 
             <TouchableOpacity
               style={[styles.roleOption, selectedMember?.role === 'admin' && styles.activeRoleOption]}
-              onPress={() => handleChangeRole(selectedMember.userId, 'admin')}
+              onPress={() => handleChangeRole(selectedMember?.user_id || selectedMember?.userId, 'admin')}
             >
               <Text style={[styles.roleOptionText, selectedMember?.role === 'admin' && styles.activeRoleOptionText]}>
                 {i18n.t('admin')}
@@ -174,7 +197,7 @@ export default function MemberList({ group, user, isOwner, canManage, onRefresh 
 
             <TouchableOpacity
               style={[styles.roleOption, selectedMember?.role === 'member' && styles.activeRoleOption]}
-              onPress={() => handleChangeRole(selectedMember.userId, 'member')}
+              onPress={() => handleChangeRole(selectedMember?.user_id || selectedMember?.userId, 'member')}
             >
               <Text style={[styles.roleOptionText, selectedMember?.role === 'member' && styles.activeRoleOptionText]}>
                 {i18n.t('member')}
@@ -251,6 +274,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   memberActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionButtonsContainer: {
     flexDirection: 'row',
     gap: 10,
   },

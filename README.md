@@ -64,6 +64,13 @@ npm install --legacy-peer-deps
 npm start
 ```
 
+**注意**：启动脚本会自动检测本机 IP 地址并保存到 `api-config.json` 文件中。应用会使用检测到的 IP 地址连接后端服务器。
+
+如果需要手动更新 IP 地址，可以运行：
+```bash
+npm run get-ip
+```
+
 3. 在手机上打开 Expo Go 应用，扫描终端显示的二维码
 
 ### 使用说明
