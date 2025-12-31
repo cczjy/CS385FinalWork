@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
@@ -11,7 +11,7 @@ router = APIRouter()
 @router.post("", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
 async def create_group(
     group_data: GroupCreate,
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
     """创建群组"""
@@ -47,7 +47,7 @@ async def create_group(
 
 @router.get("", response_model=List[GroupResponse])
 async def get_user_groups(
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
     """获取用户的群组列表"""
@@ -68,7 +68,7 @@ async def get_user_groups(
 @router.get("/{group_id}", response_model=GroupResponse)
 async def get_group(
     group_id: str,
-    user_id: str = None,  # 可选：从查询参数获取用户ID
+    user_id: str = Query(None, description="用户ID（可选）"),
     db: Session = Depends(get_db)
 ):
     """获取群组详情"""
@@ -97,7 +97,7 @@ async def get_group(
 async def update_group(
     group_id: str,
     group_data: GroupUpdate,
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
     """更新群组信息"""
@@ -131,7 +131,7 @@ async def update_group(
 @router.get("/{group_id}/members", response_model=List[GroupMemberResponse])
 async def get_group_members(
     group_id: str,
-    user_id: str = None,  # 可选：从查询参数获取用户ID
+    user_id: str = Query(None, description="用户ID（可选）"),
     db: Session = Depends(get_db)
 ):
     """获取群组成员列表"""

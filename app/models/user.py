@@ -21,3 +21,4 @@ class User(Base):
     created_tasks = relationship("Task", back_populates="creator", foreign_keys="Task.created_by")
     invitations_sent = relationship("Invitation", back_populates="inviter", foreign_keys="Invitation.inviter_id")
 
+

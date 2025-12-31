@@ -33,3 +33,4 @@ class GroupMember(Base):
     group = relationship("Group", back_populates="members")
     user = relationship("User", back_populates="group_members")
 
+

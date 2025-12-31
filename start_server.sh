@@ -7,3 +7,4 @@ echo "2. .env 文件已配置"
 echo ""
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
+

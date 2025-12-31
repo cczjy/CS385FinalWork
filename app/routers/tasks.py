@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
@@ -33,52 +33,108 @@ def check_group_permission(group_id: str, user_id: str, db: Session, required_ro
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(
     task_data: TaskCreate,
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
-    """创建任务"""
-    # 检查群组是否存在
-    group = db.query(Group).filter(Group.id == task_data.group_id).first()
-    if not group:
+    """
+    创建任务（TASK_DOCUMENT / TASK_VOTE / TASK_DISCUSSION）
+    所有群组成员都可以创建任务
+    """
+    try:
+        # 1. 验证用户是否存在
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="用户不存在"
+            )
+        
+        # 2. 检查群组是否存在
+        group = db.query(Group).filter(Group.id == task_data.group_id).first()
+        if not group:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="群组不存在"
+            )
+        
+        # 3. 检查用户是否是群组成员
+        member = db.query(GroupMember).filter(
+            GroupMember.group_id == task_data.group_id,
+            GroupMember.user_id == user_id
+        ).first()
+        
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您不是该群组的成员，无法创建任务"
+            )
+        
+        # 4. 验证任务类型（已在 schema 中验证，这里再次确认）
+        if task_data.type not in ["document", "vote", "discussion"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"无效的任务类型: {task_data.type}。支持的类型: document, vote, discussion"
+            )
+        
+        # 5. 根据任务类型初始化不同的字段
+        task_kwargs = {
+            "group_id": task_data.group_id,
+            "type": task_data.type,
+            "title": task_data.title,
+            "description": task_data.description,
+            "created_by": user_id,
+            "completed_by": []
+        }
+        
+        # 根据任务类型设置特定字段
+        if task_data.type == "document":
+            # 文档任务：初始化为空，后续可以上传文档
+            task_kwargs["document_url"] = None
+            task_kwargs["document_name"] = None
+            task_kwargs["options"] = None
+            task_kwargs["votes"] = None
+            task_kwargs["comments"] = None
+        elif task_data.type == "vote":
+            # 投票任务：初始化选项和投票为空
+            task_kwargs["options"] = []
+            task_kwargs["votes"] = {}
+            task_kwargs["document_url"] = None
+            task_kwargs["document_name"] = None
+            task_kwargs["comments"] = None
+        elif task_data.type == "discussion":
+            # 讨论任务：初始化评论为空
+            task_kwargs["comments"] = []
+            task_kwargs["document_url"] = None
+            task_kwargs["document_name"] = None
+            task_kwargs["options"] = None
+            task_kwargs["votes"] = None
+        
+        # 6. 创建任务
+        db_task = Task(**task_kwargs)
+        db.add(db_task)
+        db.commit()
+        db.refresh(db_task)
+        
+        print(f"✅ 任务创建成功: ID={db_task.id}, 类型={db_task.type}, 标题={db_task.title}")
+        return db_task
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        error_msg = str(e)
+        print(f"❌ 创建任务失败: {error_msg}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="群组不存在"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建任务时发生错误: {error_msg}"
         )
-    
-    # 检查用户是否是群组成员
-    if not check_group_member(task_data.group_id, user_id, db):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="您不是该群组的成员"
-        )
-    
-    # 检查任务类型
-    if task_data.type not in ["document", "vote", "discussion"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="无效的任务类型"
-        )
-    
-    db_task = Task(
-        group_id=task_data.group_id,
-        type=task_data.type,
-        title=task_data.title,
-        description=task_data.description,
-        created_by=user_id,
-        options=[] if task_data.type == "vote" else None,
-        votes={} if task_data.type == "vote" else None,
-        comments=[] if task_data.type == "discussion" else None,
-        completed_by=[]
-    )
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-    return db_task
 
 @router.get("/group/{group_id}", response_model=List[TaskResponse])
 async def get_group_tasks(
     group_id: str,
-    user_id: str = None,  # 可选：从查询参数获取用户ID
+    user_id: str = Query(None, description="用户ID（可选）"),
     db: Session = Depends(get_db)
 ):
     """获取群组任务列表"""
@@ -96,7 +152,7 @@ async def get_group_tasks(
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: str,
-    user_id: str = None,  # 可选：从查询参数获取用户ID
+    user_id: str = Query(None, description="用户ID（可选）"),
     db: Session = Depends(get_db)
 ):
     """获取任务详情"""
@@ -121,7 +177,7 @@ async def get_task(
 async def update_task(
     task_id: str,
     task_data: TaskUpdate,
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
     """更新任务"""
@@ -168,7 +224,7 @@ async def update_task(
 @router.post("/{task_id}/complete")
 async def complete_task(
     task_id: str,
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
     """标记任务完成"""
@@ -199,7 +255,7 @@ async def complete_task(
 async def vote_task(
     task_id: str,
     vote_data: VoteRequest,
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
     """投票"""
@@ -244,7 +300,7 @@ async def vote_task(
 async def add_comment(
     task_id: str,
     comment_data: CommentCreate,
-    user_id: str,  # 从查询参数获取用户ID
+    user_id: str = Query(..., description="用户ID"),
     db: Session = Depends(get_db)
 ):
     """添加评论"""
