@@ -122,6 +122,39 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
     }
   };
 
+  const handleDeleteGroup = () => {
+    Alert.alert(
+      i18n.locale === 'zh' ? '确认删除' : 'Confirm Delete',
+      i18n.locale === 'zh' ? '确定要删除这个群组吗？此操作无法撤销。' : 'Are you sure you want to delete this group? This action cannot be undone.',
+      [
+        {
+          text: i18n.locale === 'zh' ? '取消' : 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: i18n.locale === 'zh' ? '删除' : 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.deleteGroup(groupDetails.id, user.id);
+              Alert.alert(
+                i18n.locale === 'zh' ? '成功' : 'Success',
+                i18n.locale === 'zh' ? '群组已删除' : 'Group deleted'
+              );
+              onBack();
+              onRefresh();
+            } catch (error) {
+              Alert.alert(
+                i18n.locale === 'zh' ? '错误' : 'Error',
+                error.message || (i18n.locale === 'zh' ? '删除群组失败' : 'Failed to delete group')
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (!groupDetails) {
     return (
       <View style={styles.container}>
@@ -140,14 +173,26 @@ export default function GroupDetailView({ group, user, onBack, onRefresh, refres
           <Text style={styles.backButtonText}>← {i18n.locale === 'zh' ? '返回' : 'Back'}</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{groupDetails.name}</Text>
-        {canManage() && (
-          <TouchableOpacity
-            style={styles.inviteButton}
-            onPress={() => setShowInviteModal(true)}
-          >
-            <Text style={styles.inviteButtonText}>+ {i18n.t('invite')}</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.headerButtons}>
+          {canManage() && (
+            <TouchableOpacity
+              style={styles.inviteButton}
+              onPress={() => setShowInviteModal(true)}
+            >
+              <Text style={styles.inviteButtonText}>+ {i18n.t('invite')}</Text>
+            </TouchableOpacity>
+          )}
+          {isOwner && (
+            <TouchableOpacity
+              style={styles.deleteGroupButton}
+              onPress={handleDeleteGroup}
+            >
+              <Text style={styles.deleteGroupButtonText}>
+                {i18n.locale === 'zh' ? '删除群组' : 'Delete Group'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={styles.tabs}>
@@ -259,6 +304,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   inviteButton: {
     backgroundColor: '#667eea',
     paddingVertical: 6,
@@ -266,6 +315,17 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   inviteButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  deleteGroupButton: {
+    backgroundColor: '#ff6b6b',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  deleteGroupButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',

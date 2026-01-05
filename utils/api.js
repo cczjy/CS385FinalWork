@@ -356,6 +356,24 @@ class ApiClient {
     });
   }
 
+  /**
+   * 删除任务
+   */
+  async deleteTask(taskId, userId) {
+    return this.request(`/api/tasks/${taskId}?user_id=${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * 删除群组
+   */
+  async deleteGroup(groupId, userId) {
+    return this.request(`/api/groups/${groupId}?user_id=${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==================== 邀请相关 ====================
 
   /**

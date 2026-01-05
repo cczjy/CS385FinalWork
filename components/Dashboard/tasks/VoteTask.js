@@ -12,18 +12,52 @@ import {
 import apiClient from '../../../utils/api';
 import i18n from '../../../utils/i18n';
 
-export default function VoteTask({ task, user, onUpdate }) {
+export default function VoteTask({ task, user, onUpdate, showFullContent = false }) {
   const [showAddOptionModal, setShowAddOptionModal] = useState(false);
   const [newOption, setNewOption] = useState('');
 
   const options = task.options || [];
   const votes = task.votes || {};
-  const userVote = votes[user.id];
+  const userVote = votes[user?.id];
+  const isCompleted = task.completed_by?.includes(user?.id) || false;
+
+  const handleComplete = async () => {
+    if (!user || !user.id) {
+      Alert.alert(
+        i18n.locale === 'zh' ? '错误' : 'Error',
+        i18n.locale === 'zh' ? '用户信息不存在' : 'User information not found'
+      );
+      return;
+    }
+
+    try {
+      await apiClient.completeTask(task.id, user.id);
+      Alert.alert(
+        i18n.locale === 'zh' ? '成功' : 'Success',
+        i18n.locale === 'zh' ? '任务已完成' : 'Task completed'
+      );
+      onUpdate();
+    } catch (error) {
+      Alert.alert(
+        i18n.locale === 'zh' ? '错误' : 'Error',
+        error.message || (i18n.locale === 'zh' ? '完成任务时发生错误' : 'An error occurred while completing task')
+      );
+    }
+  };
 
   const handleVote = async (optionIndex) => {
+    if (!user || !user.id) {
+      Alert.alert(
+        i18n.locale === 'zh' ? '错误' : 'Error',
+        i18n.locale === 'zh' ? '用户信息不存在' : 'User information not found'
+      );
+      return;
+    }
+
     try {
-      const updatedVotes = { ...votes, [user.id]: optionIndex };
-      await TaskStorage.updateTask(task.id, { votes: updatedVotes });
+      const option = options[optionIndex];
+      const optionId = option?.id || optionIndex.toString();
+      await apiClient.voteTask(task.id, optionId, user.id);
       Alert.alert(
         i18n.locale === 'zh' ? '成功' : 'Success',
         i18n.locale === 'zh' ? '投票成功' : 'Vote submitted successfully'
@@ -32,7 +66,7 @@ export default function VoteTask({ task, user, onUpdate }) {
     } catch (error) {
       Alert.alert(
         i18n.locale === 'zh' ? '错误' : 'Error',
-        i18n.locale === 'zh' ? '投票时发生错误' : 'An error occurred while voting'
+        error.message || (i18n.locale === 'zh' ? '投票时发生错误' : 'An error occurred while voting')
       );
     }
   };
@@ -69,9 +103,9 @@ export default function VoteTask({ task, user, onUpdate }) {
   };
 
   const getVoteCount = (optionIndex) => {
-    const option = normalizedOptions[optionIndex];
+    const option = options[optionIndex];
     const optionId = option?.id || optionIndex.toString();
-    return Object.values(votes).filter(v => v === optionId).length;
+    return Object.values(votes).filter(v => v === optionId || v === optionIndex.toString()).length;
   };
 
   const getTotalVotes = () => {
@@ -93,20 +127,22 @@ export default function VoteTask({ task, user, onUpdate }) {
 
       <View style={styles.optionsContainer}>
         {options.map((option, index) => {
+          const optionId = option?.id || index.toString();
           const voteCount = getVoteCount(index);
           const percentage = getTotalVotes() > 0 ? (voteCount / getTotalVotes()) * 100 : 0;
-          const isSelected = userVote === index;
+          const isSelected = userVote === optionId || userVote === index.toString();
 
+          const optionText = typeof option === 'string' ? option : (option?.text || String(option));
           return (
             <TouchableOpacity
-              key={`option-${index}-${option}`}
+              key={`option-${optionId}-${index}`}
               style={[styles.optionItem, isSelected && styles.selectedOption]}
               onPress={() => !userVote && handleVote(index)}
-              disabled={!!userVote}
+              disabled={!!userVote || isCompleted}
             >
               <View style={styles.optionHeader}>
                 <Text style={[styles.optionText, isSelected && styles.selectedOptionText]}>
-                  {option}
+                  {optionText}
                 </Text>
                 {isSelected && (
                   <Text style={styles.selectedBadge}>✓</Text>
@@ -129,12 +165,14 @@ export default function VoteTask({ task, user, onUpdate }) {
         </Text>
       )}
 
-      <TouchableOpacity
-        style={styles.addOptionButton}
-        onPress={() => setShowAddOptionModal(true)}
-      >
-        <Text style={styles.addOptionButtonText}>+ {i18n.locale === 'zh' ? '添加选项' : 'Add Option'}</Text>
-      </TouchableOpacity>
+      {showFullContent && !isCompleted && (
+        <TouchableOpacity
+          style={styles.addOptionButton}
+          onPress={() => setShowAddOptionModal(true)}
+        >
+          <Text style={styles.addOptionButtonText}>+ {i18n.locale === 'zh' ? '添加选项' : 'Add Option'}</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.taskFooter}>
         <Text style={styles.totalVotesText}>
@@ -146,6 +184,25 @@ export default function VoteTask({ task, user, onUpdate }) {
           </Text>
         )}
       </View>
+
+      {!isCompleted && (
+        <TouchableOpacity
+          style={styles.completeButton}
+          onPress={handleComplete}
+        >
+          <Text style={styles.completeButtonText}>
+            {i18n.locale === 'zh' ? '标记为完成' : 'Mark as Complete'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {isCompleted && (
+        <View style={styles.completedBadge}>
+          <Text style={styles.completedText}>
+            ✓ {i18n.locale === 'zh' ? '已完成' : 'Completed'}
+          </Text>
+        </View>
+      )}
 
       <Modal
         visible={showAddOptionModal}
@@ -302,6 +359,30 @@ const styles = StyleSheet.create({
   votedText: {
     fontSize: 12,
     color: '#51cf66',
+    fontWeight: 'bold',
+  },
+  completeButton: {
+    backgroundColor: '#51cf66',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  completeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  completedBadge: {
+    backgroundColor: '#e8f5e9',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  completedText: {
+    color: '#51cf66',
+    fontSize: 14,
     fontWeight: 'bold',
   },
   modalOverlay: {
