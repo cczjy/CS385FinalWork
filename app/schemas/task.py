@@ -10,8 +10,8 @@ class TaskBase(BaseModel):
     @field_validator('type')
     @classmethod
     def validate_type(cls, v: str) -> str:
-        if v not in ['document', 'vote', 'discussion']:
-            raise ValueError('任务类型必须是 document、vote 或 discussion')
+        if v not in ['vote', 'discussion']:
+            raise ValueError('任务类型必须是 vote 或 discussion')
         return v
     
     @field_validator('title')
@@ -32,6 +32,7 @@ class TaskBase(BaseModel):
 
 class TaskCreate(TaskBase):
     group_id: str
+    options: Optional[List[Dict[str, Any]]] = Field(None, description="投票任务选项（仅投票任务需要）")
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -51,12 +52,12 @@ class TaskResponse(TaskBase):
     document_url: Optional[str] = None
     document_name: Optional[str] = None
     
-    # 投票任务
-    options: List[Dict[str, Any]] = []
-    votes: Dict[str, str] = {}
+    # 投票任务（所有任务都有这些字段，但只有投票任务使用）
+    options: List[Dict[str, Any]] = Field(default_factory=list)
+    votes: Dict[str, str] = Field(default_factory=dict)
     
-    # 讨论任务
-    comments: List[Dict[str, Any]] = []
+    # 讨论任务（所有任务都有这些字段，但只有讨论任务使用）
+    comments: List[Dict[str, Any]] = Field(default_factory=list)
     
     # 通用
     completed_by: List[str] = []

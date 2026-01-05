@@ -186,3 +186,38 @@ def format_group_response(group: Group, db: Session) -> dict:
         "member_count": len(member_list)
     }
 
+@router.delete("/{group_id}")
+async def delete_group(
+    group_id: str,
+    user_id: str = Query(..., description="用户ID"),
+    db: Session = Depends(get_db)
+):
+    """删除群组（只有群主可以删除）"""
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="群组不存在"
+        )
+    
+    # 检查用户是否是群主
+    member = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == user_id
+    ).first()
+    
+    if not member or member.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有群主可以删除群组"
+        )
+    
+    # 删除所有成员关系
+    db.query(GroupMember).filter(GroupMember.group_id == group_id).delete()
+    
+    # 删除群组
+    db.delete(group)
+    db.commit()
+    
+    return {"message": "群组已删除"}
+

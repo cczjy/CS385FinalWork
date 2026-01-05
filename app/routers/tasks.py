@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.group import Group, GroupMember
 from app.models.task import Task
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate, VoteRequest, CommentCreate
 import uuid
+import copy
 
 router = APIRouter()
 
@@ -30,6 +32,18 @@ def check_group_permission(group_id: str, user_id: str, db: Session, required_ro
         return member.role in required_roles
     return True
 
+def ensure_task_fields_not_none(task: Task) -> Task:
+    """确保任务的JSON字段不是None，避免验证错误"""
+    if task.options is None:
+        task.options = []
+    if task.votes is None:
+        task.votes = {}
+    if task.comments is None:
+        task.comments = []
+    if task.completed_by is None:
+        task.completed_by = []
+    return task
+
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(
     task_data: TaskCreate,
@@ -37,7 +51,7 @@ async def create_task(
     db: Session = Depends(get_db)
 ):
     """
-    创建任务（TASK_DOCUMENT / TASK_VOTE / TASK_DISCUSSION）
+    创建任务（vote / discussion）
     所有群组成员都可以创建任务
     """
     try:
@@ -70,50 +84,44 @@ async def create_task(
             )
         
         # 4. 验证任务类型（已在 schema 中验证，这里再次确认）
-        if task_data.type not in ["document", "vote", "discussion"]:
+        if task_data.type not in ["vote", "discussion"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"无效的任务类型: {task_data.type}。支持的类型: document, vote, discussion"
+                detail=f"无效的任务类型: {task_data.type}。支持的类型: vote, discussion"
             )
         
         # 5. 根据任务类型初始化不同的字段
+        # 所有字段都初始化为默认值，避免 None 值导致验证错误
         task_kwargs = {
             "group_id": task_data.group_id,
             "type": task_data.type,
             "title": task_data.title,
             "description": task_data.description,
             "created_by": user_id,
-            "completed_by": []
+            "completed_by": [],
+            "document_url": None,
+            "document_name": None,
+            "options": task_data.options if task_data.type == "vote" and task_data.options else [],
+            "votes": {},
+            "comments": []
         }
         
-        # 根据任务类型设置特定字段
-        if task_data.type == "document":
-            # 文档任务：初始化为空，后续可以上传文档
-            task_kwargs["document_url"] = None
-            task_kwargs["document_name"] = None
-            task_kwargs["options"] = None
-            task_kwargs["votes"] = None
-            task_kwargs["comments"] = None
-        elif task_data.type == "vote":
-            # 投票任务：初始化选项和投票为空
-            task_kwargs["options"] = []
-            task_kwargs["votes"] = {}
-            task_kwargs["document_url"] = None
-            task_kwargs["document_name"] = None
-            task_kwargs["comments"] = None
-        elif task_data.type == "discussion":
-            # 讨论任务：初始化评论为空
-            task_kwargs["comments"] = []
-            task_kwargs["document_url"] = None
-            task_kwargs["document_name"] = None
-            task_kwargs["options"] = None
-            task_kwargs["votes"] = None
+        # 验证投票任务的选项
+        if task_data.type == "vote":
+            if not task_kwargs["options"] or len(task_kwargs["options"]) < 2:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="投票任务至少需要2个选项"
+                )
         
         # 6. 创建任务
         db_task = Task(**task_kwargs)
         db.add(db_task)
         db.commit()
         db.refresh(db_task)
+        
+        # 确保JSON字段不是None（SQLAlchemy可能返回None）
+        ensure_task_fields_not_none(db_task)
         
         print(f"✅ 任务创建成功: ID={db_task.id}, 类型={db_task.type}, 标题={db_task.title}")
         return db_task
@@ -147,6 +155,9 @@ async def get_group_tasks(
             )
     
     tasks = db.query(Task).filter(Task.group_id == group_id).order_by(Task.created_at.desc()).all()
+    # 确保所有任务的JSON字段不是None
+    for task in tasks:
+        ensure_task_fields_not_none(task)
     return tasks
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -171,6 +182,8 @@ async def get_task(
                 detail="您不是该群组的成员"
             )
     
+    # 确保JSON字段不是None
+    ensure_task_fields_not_none(task)
     return task
 
 @router.put("/{task_id}", response_model=TaskResponse)
@@ -219,6 +232,8 @@ async def update_task(
     
     db.commit()
     db.refresh(task)
+    # 确保JSON字段不是None
+    ensure_task_fields_not_none(task)
     return task
 
 @router.post("/{task_id}/complete")
@@ -249,6 +264,8 @@ async def complete_task(
         db.commit()
         db.refresh(task)
     
+    # 确保JSON字段不是None
+    ensure_task_fields_not_none(task)
     return {"message": "任务已标记为完成", "task": task}
 
 @router.post("/{task_id}/vote")
@@ -294,6 +311,8 @@ async def vote_task(
     db.commit()
     db.refresh(task)
     
+    # 确保JSON字段不是None
+    ensure_task_fields_not_none(task)
     return {"message": "投票成功", "task": task}
 
 @router.post("/{task_id}/comment")
@@ -332,29 +351,87 @@ async def add_comment(
             detail="用户不存在"
         )
     
-    comments = task.comments or []
+    # 获取现有评论，确保是列表
+    comments = task.comments if task.comments is not None else []
+    # 深拷贝评论列表，确保SQLAlchemy能检测到变化
+    comments = copy.deepcopy(comments)
+    
     new_comment = {
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "username": user.username,
         "text": comment_data.text,
-        "created_at": str(task.created_at),
+        "created_at": datetime.now().isoformat(),
         "replies": []
     }
     
     if comment_data.parent_id:
-        # 回复评论
+        # 回复评论：找到父评论并添加回复
+        found = False
         for comment in comments:
             if comment.get("id") == comment_data.parent_id:
-                comment.setdefault("replies", []).append(new_comment)
+                # 确保replies字段存在
+                if "replies" not in comment:
+                    comment["replies"] = []
+                comment["replies"].append(new_comment)
+                found = True
                 break
+        if not found:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="父评论不存在"
+            )
     else:
-        # 新评论
+        # 新评论：添加到评论列表
         comments.append(new_comment)
     
+    # 更新任务的comments字段
     task.comments = comments
     db.commit()
     db.refresh(task)
     
+    # 确保JSON字段不是None
+    ensure_task_fields_not_none(task)
     return {"message": "评论添加成功", "task": task}
+
+@router.delete("/{task_id}")
+async def delete_task(
+    task_id: str,
+    user_id: str = Query(..., description="用户ID"),
+    db: Session = Depends(get_db)
+):
+    """删除任务（只有群主或任务创建者可以删除）"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="任务不存在"
+        )
+    
+    # 检查用户是否是群组成员
+    if not check_group_member(task.group_id, user_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您不是该群组的成员"
+        )
+    
+    # 检查权限：群主或任务创建者
+    member = db.query(GroupMember).filter(
+        GroupMember.group_id == task.group_id,
+        GroupMember.user_id == user_id
+    ).first()
+    
+    is_owner = member and member.role == "owner"
+    is_creator = task.created_by == user_id
+    
+    if not (is_owner or is_creator):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有群主或任务创建者可以删除任务"
+        )
+    
+    db.delete(task)
+    db.commit()
+    
+    return {"message": "任务已删除"}
 
