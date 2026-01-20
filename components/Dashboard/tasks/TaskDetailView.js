@@ -83,6 +83,7 @@ export default function TaskDetailView({ task, user, group, onBack, onRefresh, o
           <VoteTask 
             task={taskDetails} 
             user={user} 
+            group={group}
             onUpdate={loadTaskDetails}
             showFullContent={true}
           />
@@ -92,6 +93,7 @@ export default function TaskDetailView({ task, user, group, onBack, onRefresh, o
           <DiscussionTask 
             task={taskDetails} 
             user={user} 
+            group={group}
             onUpdate={loadTaskDetails}
             showFullContent={true}
           />
@@ -110,16 +112,26 @@ export default function TaskDetailView({ task, user, group, onBack, onRefresh, o
         <Text style={styles.headerTitle} numberOfLines={1}>
           {i18n.locale === 'zh' ? '任务详情' : 'Task Details'}
         </Text>
-        {canDelete() && (
-          <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-            <Text style={styles.deleteButtonText}>
-              {i18n.locale === 'zh' ? '删除' : 'Delete'}
-            </Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={loadTaskDetails} style={styles.refreshButton}>
+            <Text style={styles.refreshButtonText}>🔄</Text>
           </TouchableOpacity>
-        )}
+          {canDelete() && (
+            <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
+              <Text style={styles.deleteButtonText}>
+                {i18n.locale === 'zh' ? '删除' : 'Delete'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+        contentContainerStyle={styles.scrollContent}
+      >
         {loading ? (
           <Text style={styles.loadingText}>
             {i18n.locale === 'zh' ? '加载中...' : 'Loading...'}
@@ -165,6 +177,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1a1a1a',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  refreshButton: {
+    padding: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  refreshButtonText: {
+    fontSize: 18,
+  },
   deleteButton: {
     padding: 8,
     paddingHorizontal: 12,
@@ -178,6 +204,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 15,
   },
   loadingText: {

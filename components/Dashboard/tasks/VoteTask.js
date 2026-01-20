@@ -12,38 +12,27 @@ import {
 import apiClient from '../../../utils/api';
 import i18n from '../../../utils/i18n';
 
-export default function VoteTask({ task, user, onUpdate, showFullContent = false }) {
+export default function VoteTask({ task, user, group, onUpdate, showFullContent = false }) {
   const [showAddOptionModal, setShowAddOptionModal] = useState(false);
   const [newOption, setNewOption] = useState('');
 
   const options = task.options || [];
   const votes = task.votes || {};
-  const userVote = votes[user?.id];
+  
+  // 尝试多种方式匹配用户ID，确保能正确获取投票状态
+  const userIdStr = String(user?.id);
+  const userIdNum = Number(user?.id);
+  const userVote = votes[userIdStr] || votes[userIdNum] || votes[user?.id] || null;
+  
   const isCompleted = task.completed_by?.includes(user?.id) || false;
 
-  const handleComplete = async () => {
-    if (!user || !user.id) {
-      Alert.alert(
-        i18n.locale === 'zh' ? '错误' : 'Error',
-        i18n.locale === 'zh' ? '用户信息不存在' : 'User information not found'
-      );
-      return;
-    }
-
-    try {
-      await apiClient.completeTask(task.id, user.id);
-      Alert.alert(
-        i18n.locale === 'zh' ? '成功' : 'Success',
-        i18n.locale === 'zh' ? '任务已完成' : 'Task completed'
-      );
-      onUpdate();
-    } catch (error) {
-      Alert.alert(
-        i18n.locale === 'zh' ? '错误' : 'Error',
-        error.message || (i18n.locale === 'zh' ? '完成任务时发生错误' : 'An error occurred while completing task')
-      );
-    }
+  // 检查用户是否是群主
+  const isOwner = () => {
+    if (!user || !group) return false;
+    const role = group.members?.find(m => (m.user_id || m.userId) === user.id)?.role;
+    return role === 'owner';
   };
+
 
   const handleVote = async (optionIndex) => {
     if (!user || !user.id) {
@@ -54,16 +43,48 @@ export default function VoteTask({ task, user, onUpdate, showFullContent = false
       return;
     }
 
+    // 重新获取最新的投票数据，避免使用旧的 userVote 值
+    const currentVotes = task.votes || {};
+    const currentUserVote = currentVotes[String(user.id)] || currentVotes[user.id];
+    
+    // 如果用户已经投票，阻止再次投票
+    if (currentUserVote !== undefined && currentUserVote !== null) {
+      Alert.alert(
+        i18n.locale === 'zh' ? '提示' : 'Notice',
+        i18n.locale === 'zh' ? '您已经投过票了' : 'You have already voted'
+      );
+      return;
+    }
+
+    // 如果任务已完成，不允许投票
+    if (isCompleted) {
+      Alert.alert(
+        i18n.locale === 'zh' ? '提示' : 'Notice',
+        i18n.locale === 'zh' ? '任务已完成，无法投票' : 'Task is completed, cannot vote'
+      );
+      return;
+    }
+
     try {
       const option = options[optionIndex];
+      if (!option) {
+        Alert.alert(
+          i18n.locale === 'zh' ? '错误' : 'Error',
+          i18n.locale === 'zh' ? '选项不存在' : 'Option not found'
+        );
+        return;
+      }
       const optionId = option?.id || optionIndex.toString();
+      
+      // 调用投票API
       await apiClient.voteTask(task.id, optionId, user.id);
-      Alert.alert(
-        i18n.locale === 'zh' ? '成功' : 'Success',
-        i18n.locale === 'zh' ? '投票成功' : 'Vote submitted successfully'
-      );
-      onUpdate();
+      
+      // 投票成功后，立即刷新数据以显示最新的投票率
+      if (onUpdate) {
+        await onUpdate();
+      }
     } catch (error) {
+      console.error('投票错误:', error);
       Alert.alert(
         i18n.locale === 'zh' ? '错误' : 'Error',
         error.message || (i18n.locale === 'zh' ? '投票时发生错误' : 'An error occurred while voting')
@@ -105,7 +126,8 @@ export default function VoteTask({ task, user, onUpdate, showFullContent = false
   const getVoteCount = (optionIndex) => {
     const option = options[optionIndex];
     const optionId = option?.id || optionIndex.toString();
-    return Object.values(votes).filter(v => v === optionId || v === optionIndex.toString()).length;
+    // 只使用 optionId 匹配，确保统计准确
+    return Object.values(votes).filter(v => String(v) === String(optionId)).length;
   };
 
   const getTotalVotes = () => {
@@ -130,15 +152,19 @@ export default function VoteTask({ task, user, onUpdate, showFullContent = false
           const optionId = option?.id || index.toString();
           const voteCount = getVoteCount(index);
           const percentage = getTotalVotes() > 0 ? (voteCount / getTotalVotes()) * 100 : 0;
-          const isSelected = userVote === optionId || userVote === index.toString();
+          // 只使用 optionId 匹配，确保只选中一个选项
+          const isSelected = userVote && String(userVote) === String(optionId);
+          // 只有当前用户没有投票且任务未完成时才能投票
+          const canVote = !userVote && !isCompleted;
+          const isOwnerUser = isOwner();
 
           const optionText = typeof option === 'string' ? option : (option?.text || String(option));
           return (
             <TouchableOpacity
               key={`option-${optionId}-${index}`}
               style={[styles.optionItem, isSelected && styles.selectedOption]}
-              onPress={() => !userVote && handleVote(index)}
-              disabled={!!userVote || isCompleted}
+              onPress={() => canVote && handleVote(index)}
+              disabled={!canVote}
             >
               <View style={styles.optionHeader}>
                 <Text style={[styles.optionText, isSelected && styles.selectedOptionText]}>
@@ -148,12 +174,19 @@ export default function VoteTask({ task, user, onUpdate, showFullContent = false
                   <Text style={styles.selectedBadge}>✓</Text>
                 )}
               </View>
-              <View style={styles.progressBarContainer}>
-                <View style={[styles.progressBar, { width: `${percentage}%` }]} />
-              </View>
-              <Text style={styles.voteCount}>
-                {voteCount} {i18n.locale === 'zh' ? '票' : 'votes'} ({percentage.toFixed(1)}%)
-              </Text>
+              {/* 群主始终可以看到投票率和进度条 */}
+              {/* 群员：投之前隐藏票数，投之后可以查看 */}
+              {(isOwnerUser || userVote) && (
+                <>
+                  <View style={styles.progressBarContainer}>
+                    <View style={[styles.progressBar, { width: `${percentage}%` }]} />
+                  </View>
+                  <Text style={styles.voteCount}>
+                    {voteCount} {i18n.locale === 'zh' ? '票' : 'votes'} ({percentage.toFixed(1)}%)
+                  </Text>
+                </>
+              )}
+              {/* 群员未投票时不显示任何信息 */}
             </TouchableOpacity>
           );
         })}
@@ -174,35 +207,20 @@ export default function VoteTask({ task, user, onUpdate, showFullContent = false
         </TouchableOpacity>
       )}
 
-      <View style={styles.taskFooter}>
-        <Text style={styles.totalVotesText}>
-          {i18n.locale === 'zh' ? '总票数' : 'Total Votes'}: {getTotalVotes()}
-        </Text>
-        {userVote !== undefined && (
-          <Text style={styles.votedText}>
-            {i18n.locale === 'zh' ? '已投票' : 'Voted'}
+      {/* 群主始终可以看到总票数，群员投之后也可以看到 */}
+      {(isOwner() || userVote) && (
+        <View style={styles.taskFooter}>
+          <Text style={styles.totalVotesText}>
+            {i18n.locale === 'zh' ? '总票数' : 'Total Votes'}: {getTotalVotes()}
           </Text>
-        )}
-      </View>
-
-      {!isCompleted && (
-        <TouchableOpacity
-          style={styles.completeButton}
-          onPress={handleComplete}
-        >
-          <Text style={styles.completeButtonText}>
-            {i18n.locale === 'zh' ? '标记为完成' : 'Mark as Complete'}
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {isCompleted && (
-        <View style={styles.completedBadge}>
-          <Text style={styles.completedText}>
-            ✓ {i18n.locale === 'zh' ? '已完成' : 'Completed'}
-          </Text>
+          {userVote !== undefined && userVote !== null && (
+            <Text style={styles.votedText}>
+              {i18n.locale === 'zh' ? '已投票' : 'Voted'}
+            </Text>
+          )}
         </View>
       )}
+
 
       <Modal
         visible={showAddOptionModal}

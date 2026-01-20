@@ -5,13 +5,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   TextInput,
-  ScrollView,
   Alert,
 } from 'react-native';
 import apiClient from '../../../utils/api';
 import i18n from '../../../utils/i18n';
 
-export default function DiscussionTask({ task, user, onUpdate, showFullContent = false }) {
+export default function DiscussionTask({ task, user, group, onUpdate, showFullContent = false }) {
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState('');
@@ -26,29 +25,13 @@ export default function DiscussionTask({ task, user, onUpdate, showFullContent =
 
   const isCompleted = task.completed_by?.includes(user?.id) || false;
 
-  const handleComplete = async () => {
-    if (!user || !user.id) {
-      Alert.alert(
-        i18n.locale === 'zh' ? '错误' : 'Error',
-        i18n.locale === 'zh' ? '用户信息不存在' : 'User information not found'
-      );
-      return;
-    }
-
-    try {
-      await apiClient.completeTask(task.id, user.id);
-      Alert.alert(
-        i18n.locale === 'zh' ? '成功' : 'Success',
-        i18n.locale === 'zh' ? '任务已完成' : 'Task completed'
-      );
-      onUpdate();
-    } catch (error) {
-      Alert.alert(
-        i18n.locale === 'zh' ? '错误' : 'Error',
-        error.message || (i18n.locale === 'zh' ? '完成任务时发生错误' : 'An error occurred while completing task')
-      );
-    }
+  // 检查用户是否是群主
+  const isOwner = () => {
+    if (!user || !group) return false;
+    const role = group.members?.find(m => (m.user_id || m.userId) === user.id)?.role;
+    return role === 'owner';
   };
+
 
   const handleAddComment = async () => {
     if (!newComment.trim()) {
@@ -165,7 +148,7 @@ export default function DiscussionTask({ task, user, onUpdate, showFullContent =
         <Text style={styles.taskDescription}>{task.description}</Text>
       )}
 
-      <ScrollView style={styles.commentsContainer} showsVerticalScrollIndicator={true}>
+      <View style={styles.commentsContainer}>
         {comments.length === 0 ? (
           <View style={styles.emptyCommentsContainer}>
             <Text style={styles.emptyText}>
@@ -255,7 +238,7 @@ export default function DiscussionTask({ task, user, onUpdate, showFullContent =
             </View>
           ))
         )}
-      </ScrollView>
+      </View>
 
       <View style={styles.commentInputContainer}>
         <TextInput
@@ -275,24 +258,6 @@ export default function DiscussionTask({ task, user, onUpdate, showFullContent =
         </TouchableOpacity>
       </View>
 
-      {!isCompleted && (
-        <TouchableOpacity
-          style={styles.completeButton}
-          onPress={handleComplete}
-        >
-          <Text style={styles.completeButtonText}>
-            {i18n.locale === 'zh' ? '标记为完成' : 'Mark as Complete'}
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {isCompleted && (
-        <View style={styles.completedBadge}>
-          <Text style={styles.completedText}>
-            ✓ {i18n.locale === 'zh' ? '已完成' : 'Completed'}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -308,7 +273,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    maxHeight: 600,
   },
   taskHeader: {
     flexDirection: 'row',
@@ -339,7 +303,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   commentsContainer: {
-    maxHeight: 500,
     marginBottom: 15,
   },
   emptyCommentsContainer: {
