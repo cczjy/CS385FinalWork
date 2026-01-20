@@ -4,11 +4,10 @@
 
 ## 技术栈
 
-- **FastAPI**: 现代、快速的 Web 框架
-- **PostgreSQL**: 关系型数据库
-- **SQLAlchemy**: ORM 框架
-- **Pydantic**: 数据验证
-- **Uvicorn**: ASGI 服务器
+- FastAPI
+- PostgreSQL
+- SQLAlchemy
+- Uvicorn
 
 ## 项目结构
 

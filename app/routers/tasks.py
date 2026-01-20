@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from typing import List
 from datetime import datetime
 from app.database import get_db
@@ -305,14 +306,22 @@ async def vote_task(
         )
     
     # 更新投票（允许修改投票）
-    votes = task.votes or {}
+    # 深拷贝 votes 字典，确保 SQLAlchemy 能检测到变化
+    votes = copy.deepcopy(task.votes) if task.votes else {}
     votes[user_id] = vote_data.option_id
     task.votes = votes
+    # 标记 JSON 字段已修改，确保 SQLAlchemy 能检测到变化
+    flag_modified(task, "votes")
     db.commit()
     db.refresh(task)
     
     # 确保JSON字段不是None
     ensure_task_fields_not_none(task)
+    
+    # 调试：打印投票数据
+    print(f"✅ 投票成功 - 用户ID: {user_id}, 选项ID: {vote_data.option_id}")
+    print(f"📊 当前所有投票: {task.votes}")
+    
     return {"message": "投票成功", "task": task}
 
 @router.post("/{task_id}/comment")
