@@ -1,24 +1,9 @@
-/**
- * API 客户端
- * 用于与后端 FastAPI 通信
- */
 
-// 配置 API 基础 URL
-// 
-// 重要说明：
-// - 如果使用真机（Expo Go），必须使用电脑的实际 IP 地址
-// - 如果使用模拟器，可以使用 localhost 或特殊地址
-// - IP地址可以通过设置页面进行配置，存储在本地
-// 如果连接失败，请检查：
-// 1. 后端是否运行：uvicorn main:app --reload --host 0.0.0.0
-// 2. 手机和电脑是否在同一 WiFi
-// 3. 防火墙是否允许 8000 端口
-// 4. 在设置页面配置正确的服务器IP地址
 
 import { Platform } from 'react-native';
 import { getApiServerIp, getApiServerPort } from './config';
 
-// 默认IP地址（如果用户未配置时使用）
+
 const DEFAULT_IP = '192.168.4.23';
 
 /**
@@ -35,9 +20,7 @@ const getLocalConfigIp = () => {
   }
 };
 
-/**
- * 从本地配置文件读取端口
- */
+
 const getLocalConfigPort = () => {
   try {
     const localConfig = require('../api-config.json');
@@ -47,9 +30,7 @@ const getLocalConfigPort = () => {
   }
 };
 
-/**
- * 获取API基础URL（异步函数）
- */
+
 const getApiBaseUrl = async () => {
   if (!__DEV__) {
     return 'https://your-api-domain.com';
