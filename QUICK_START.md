@@ -11,7 +11,7 @@ pip install -r requirements.txt
 
 ### 2. 配置环境变量
 
-创建 `.env` 文件（如果还没有）：
+创建 `.env` 文件：
 
 ```env
 DATABASE_URL=postgresql://postgres:你的密码@localhost:5432/teamproject
@@ -37,11 +37,7 @@ python init_db.py
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-或者：
 
-```bash
-python main.py
-```
 
 ### 5. 访问 API 文档
 
@@ -50,7 +46,7 @@ python main.py
 
 ---
 
-## 📱 前端对接步骤
+##  前端对接
 
 ### 1. 复制 API 客户端
 
@@ -58,7 +54,6 @@ python main.py
 
 ```bash
 # 从后端项目复制到前端项目
-cp D:\pythonCode\TeamProject\utils\api.js "C:\Users\cjy\Desktop\Mobile Develop\utils\api.js"
 ```
 
 ### 2. 配置 API 基础 URL
@@ -71,10 +66,6 @@ const API_BASE_URL = __DEV__
   : 'https://your-api-domain.com';
 ```
 
-**重要**: 
-- 如果手机和电脑在同一 WiFi 网络，使用电脑的 IP 地址
-- 在 Windows 上，运行 `ipconfig` 查看 IP 地址（通常是 192.168.x.x）
-- 确保防火墙允许 8000 端口
 
 ### 3. 在前端使用 API
 
@@ -225,23 +216,6 @@ const loadGroups = async () => {
 
 ---
 
-## 📝 下一步
 
-1. **测试 API**: 使用 Swagger UI (http://localhost:8000/docs) 测试各个端点
-2. **集成前端**: 逐步将前端代码从本地存储改为 API 调用
-3. **添加错误处理**: 在前端添加完善的错误处理逻辑
-4. **文件上传**: 实现文档任务的文件上传功能（需要额外的文件上传端点）
-
----
-
-## 📚 相关文档
-
-- [API 文档](./API_DOCUMENTATION.md) - 完整的 API 端点文档
-- [数据库设置](./DATABASE_SETUP.md) - PostgreSQL 数据库配置指南
-- [README](./README.md) - 项目说明
-
----
-
-**祝开发顺利！** 🎉
 
 

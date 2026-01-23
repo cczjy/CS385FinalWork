@@ -28,31 +28,15 @@ TeamProject/
 
 ## 快速开始
 
-### 1. 安装依赖
+###  安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
 
-复制 `.env.example` 为 `.env` 并修改配置：
 
-```bash
-cp .env.example .env
-```
-
-编辑 `.env` 文件，设置数据库连接等信息。
-
-### 3. 创建数据库
-
-确保 PostgreSQL 已安装并运行，创建数据库：
-
-```sql
-CREATE DATABASE teamproject;
-```
-
-### 4. 运行应用
+###  运行应用
 
 ```bash
 # 开发模式
@@ -62,7 +46,7 @@ uvicorn main:app --reload
 python main.py
 ```
 
-### 5. 访问API文档
+###  访问API文档
 
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc

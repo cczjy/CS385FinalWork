@@ -1,11 +1,4 @@
-/**
- * API 客户端
- * 用于与后端 FastAPI 通信
- */
 
-// 配置 API 基础 URL
-// 开发环境：使用你的电脑 IP 地址（例如：http://192.168.1.100:8000）
-// 生产环境：使用实际的后端服务器地址
 const API_BASE_URL = __DEV__ 
   ? 'http://localhost:8000'  // 开发环境，如果手机和电脑不在同一网络，需要改为电脑的 IP 地址
   : 'https://your-api-domain.com';  // 生产环境
